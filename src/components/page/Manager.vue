@@ -32,36 +32,27 @@
             >
                 <el-table-column type="selection" width="55" align="center"></el-table-column>
                 <el-table-column prop="id" label="ID" width="55" align="center"></el-table-column>
-                <el-table-column prop="name" label="用户名"></el-table-column>
-                <el-table-column label="账户余额">
-                    <template slot-scope="scope">￥{{scope.row.money}}</template>
-                </el-table-column>
-                <el-table-column label="头像(查看大图)" align="center">
+                <el-table-column prop="appName" label="应用名"></el-table-column>
+                <el-table-column label="应用主图(查看大图)" align="center">
                     <template slot-scope="scope">
-                        <el-image
-                            class="table-td-thumb"
-                            :src="scope.row.thumb"
-                            :preview-src-list="[scope.row.thumb]"
-                        ></el-image>
+                        <el-popover
+                            placement="right"
+                            title=""
+                            trigger="hover">
+                            <img :src="scope.row.imgSrc" style="max-height: 250px;max-width: 500px"/>
+                            <img slot="reference" :src="scope.row.imgSrc" :alt="scope.row.imgSrc" style="max-height: 50px;max-width: 130px">
+                        </el-popover>
                     </template>
                 </el-table-column>
-                <el-table-column prop="address" label="地址"></el-table-column>
-                <el-table-column label="状态" align="center">
-                    <template slot-scope="scope">
-                        <el-tag
-                            :type="scope.row.state==='成功'?'success':(scope.row.state==='失败'?'danger':'')"
-                        >{{scope.row.state}}</el-tag>
-                    </template>
-                </el-table-column>
-
-                <el-table-column prop="date" label="注册时间"></el-table-column>
+                <el-table-column prop="createdTime" label="发布时间"></el-table-column>
+                <el-table-column prop="updateTime" label="更新时间"></el-table-column>
                 <el-table-column label="操作" width="180" align="center">
                     <template slot-scope="scope">
                         <el-button
                             type="text"
                             icon="el-icon-edit"
-                            @click="handleEdit(scope.$index, scope.row)"
-                        >编辑</el-button>
+                            @click="handleEdit(scope.$index, scope.row.managers)"
+                        >查看负责人</el-button>
                         <el-button
                             type="text"
                             icon="el-icon-delete"
@@ -84,7 +75,7 @@
         </div>
 
         <!-- 编辑弹出框 -->
-        <el-dialog title="编辑" :visible.sync="editVisible" width="30%">
+        <el-dialog title="查看负责人" :visible.sync="editVisible" width="40%">
             <el-form ref="form" :model="form" label-width="70px">
                 <el-form-item label="用户名">
                     <el-input v-model="form.name"></el-input>
@@ -93,6 +84,16 @@
                     <el-input v-model="form.address"></el-input>
                 </el-form-item>
             </el-form>
+            <el-table
+                :data="from"
+                border
+                class="table"
+                ref="form"
+                header-cell-class-name="table-header"
+            >
+            <el-table-column prop="managerName" label="负责人"></el-table-column>
+                        <el-table-column prop="managerName" label="负责人"></el-table-column>
+            </el-table>
             <span slot="footer" class="dialog-footer">
                 <el-button @click="editVisible = false">取 消</el-button>
                 <el-button type="primary" @click="saveEdit">确 定</el-button>
@@ -118,37 +119,80 @@ export default {
             delList: [],
             editVisible: false,
             pageTotal: 0,
-            form: {},
+            form: [],
             idx: -1,
-            id: -1
+            id: -1,
+            searchFlag: 'false',
+
         };
     },
     created() {
-        this.getData();
+        this.getData(this.query.pageIndex);
     },
     methods: {
-        // 获取 easy-mock 的模拟数据
-        getData() {
-            fetchData(this.query).then(res => {
-                console.log(res);
-                this.tableData = res.list;
-                this.pageTotal = res.pageTotal || 50;
-            });
+
+        // 获取数据
+        getData(page) {
+            var _this = this
+            this.$axios.get('manager/list/' + page)
+                .then(response => {
+                    console.log(response.data)
+                    _this.tableData = response.data.records
+                    _this.pageTotal = response.data.total
+                    _this.query.pageIndex = response.data.current
+                })
+                .catch(function (error) {
+                console.log(error)
+            })
         },
         // 触发搜索按钮
         handleSearch() {
-            this.$set(this.query, 'pageIndex', 1);
-            this.getData();
+            //this.$set(this.query, 'pageIndex', 1);
+            var _this = this
+            // 默认搜索都是第一页
+            this.$axios.get('dynamic/search/'+ this.query.pageIndex,{ params:{
+                beginDate: this.query.searchDate[0],
+                endDate:this.query.searchDate[1],
+                des: this.query.des
+            }
+
+            })
+                .then(response => {
+                    console.log(response.data)
+                    // 设置搜索标志
+                    _this.searchFlag = true
+                    _this.tableData = response.data.records
+                    _this.pageTotal = response.data.total
+                    _this.query.pageIndex = response.data.current
+                })
+                .catch(function (error) {
+                console.log(error)
+            })
         },
         // 删除操作
         handleDelete(index, row) {
+            var _this = this
             // 二次确认删除
             this.$confirm('确定要删除吗？', '提示', {
                 type: 'warning'
             })
                 .then(() => {
-                    this.$message.success('删除成功');
-                    this.tableData.splice(index, 1);
+                    // 删除
+                this.$axios.delete('manager/delete',{
+                    data: {
+                        "id":row.dynamicId
+                        }
+                    })
+                    .then(response => {
+                        console.log(response.data)
+                        _this.tableData.splice(index, 1)
+                        _this.$message.success('删除成功')
+                        // 刷新当前页面
+                        _this.getData(_this.query.pageIndex)
+                    })
+                    .catch(function (error) {
+                    console.log(error)
+                })
                 })
                 .catch(() => {});
         },
@@ -181,7 +225,15 @@ export default {
         // 分页导航
         handlePageChange(val) {
             this.$set(this.query, 'pageIndex', val);
-            this.getData();
+            // 判断是搜索后的分页 还是正常分页
+            if(this.query.searchDate === '' && this.query.des === '') {
+                this.searchFlag = false
+            }
+            if (this.query.state !== '' || this.searchFlag !== false) {
+                this.handleSearch()
+            } else {
+                this.getData(this.query.pageIndex)
+            }
         }
     }
 };
