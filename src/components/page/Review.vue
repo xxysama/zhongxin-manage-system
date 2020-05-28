@@ -15,12 +15,12 @@
                     class="handle-del mr10"
                     @click="delAllSelection"
                 >批量删除</el-button>
-                <el-select v-model="query.address" placeholder="地址" class="handle-select mr10">
-                    <el-option key="1" label="广东省" value="广东省"></el-option>
-                    <el-option key="2" label="湖南省" value="湖南省"></el-option>
-                </el-select>
-                <el-input v-model="query.name" placeholder="用户名" class="handle-input mr10"></el-input>
+                <el-input v-model="query.userId" placeholder="用户id" class="handle-input"></el-input>
                 <el-button type="primary" icon="el-icon-search" @click="handleSearch">搜索</el-button>
+                <el-input v-model="query.appId" placeholder="应用id" class="handle-input"></el-input>
+                <el-button type="primary" icon="el-icon-search" @click="handleSearch2">搜索</el-button>
+
+                <el-button type="primary" style="float:right" icon="el-icon-plus" @click="handleAdd">新增</el-button>
             </div>
             <el-table
                 :data="tableData"
@@ -31,30 +31,12 @@
                 @selection-change="handleSelectionChange"
             >
                 <el-table-column type="selection" width="55" align="center"></el-table-column>
-                <el-table-column prop="id" label="ID" width="55" align="center"></el-table-column>
-                <el-table-column prop="name" label="用户名"></el-table-column>
-                <el-table-column label="账户余额">
-                    <template slot-scope="scope">￥{{scope.row.money}}</template>
-                </el-table-column>
-                <el-table-column label="头像(查看大图)" align="center">
-                    <template slot-scope="scope">
-                        <el-image
-                            class="table-td-thumb"
-                            :src="scope.row.thumb"
-                            :preview-src-list="[scope.row.thumb]"
-                        ></el-image>
-                    </template>
-                </el-table-column>
-                <el-table-column prop="address" label="地址"></el-table-column>
-                <el-table-column label="状态" align="center">
-                    <template slot-scope="scope">
-                        <el-tag
-                            :type="scope.row.state==='成功'?'success':(scope.row.state==='失败'?'danger':'')"
-                        >{{scope.row.state}}</el-tag>
-                    </template>
-                </el-table-column>
-
-                <el-table-column prop="date" label="注册时间"></el-table-column>
+                <el-table-column prop="reviewId" label="ID" width="55" align="center"></el-table-column>
+                <el-table-column prop="appId" label="应用ID"></el-table-column>
+                <el-table-column prop="content" label="评论内容"></el-table-column>
+                <el-table-column prop="userId" label="用户id"></el-table-column>
+                <el-table-column prop="createdTime" label="创建时间"></el-table-column>
+                <el-table-column prop="updatedTime" label="更新时间"></el-table-column>
                 <el-table-column label="操作" width="180" align="center">
                     <template slot-scope="scope">
                         <el-button
@@ -86,16 +68,32 @@
         <!-- 编辑弹出框 -->
         <el-dialog title="编辑" :visible.sync="editVisible" width="30%">
             <el-form ref="form" :model="form" label-width="70px">
-                <el-form-item label="用户名">
-                    <el-input v-model="form.name"></el-input>
-                </el-form-item>
-                <el-form-item label="地址">
-                    <el-input v-model="form.address"></el-input>
+                <el-form-item label="评论内容">
+                    <el-input v-model="updateContent"></el-input>
                 </el-form-item>
             </el-form>
             <span slot="footer" class="dialog-footer">
                 <el-button @click="editVisible = false">取 消</el-button>
-                <el-button type="primary" @click="saveEdit">确 定</el-button>
+                <el-button type="primary" @click="saveEdit()">确 定</el-button>
+            </span>
+        </el-dialog>
+
+        <!-- 新增弹出框 -->
+        <el-dialog title="新增评论" :visible.sync="addVisible" width="30%">
+            <el-form ref="addform" :model="addform" label-width="70px">
+                <el-form-item label="应用id">
+                    <el-input v-model="addform.appId"></el-input>
+                </el-form-item>
+                <el-form-item label="用户id">
+                    <el-input v-model="addform.userId"></el-input>
+                </el-form-item>
+                <el-form-item label="评论内容">
+                    <el-input v-model="addform.content"></el-input>
+                </el-form-item>
+            </el-form>
+            <span slot="footer" class="dialog-footer">
+                <el-button @click="addVisible = false">取 消</el-button>
+                <el-button type="primary" @click="saveAdd()">确 定</el-button>
             </span>
         </el-dialog>
     </div>
@@ -108,8 +106,8 @@ export default {
     data() {
         return {
             query: {
-                address: '',
-                name: '',
+                userId:'',
+                appId: '',
                 pageIndex: 1,
                 pageSize: 10
             },
@@ -120,7 +118,15 @@ export default {
             pageTotal: 0,
             form: {},
             idx: -1,
-            id: -1
+            id: -1,
+            updateContent:'',
+            updateId:'',
+            addVisible: false,
+            addform:{
+                appId:'',
+                userId:'',
+                content:''
+            }
         };
     },
     created() {
@@ -129,26 +135,61 @@ export default {
     methods: {
         // 获取 easy-mock 的模拟数据
         getData() {
-            fetchData(this.query).then(res => {
-                console.log(res);
-                this.tableData = res.list;
-                this.pageTotal = res.pageTotal || 50;
-            });
+            var _this = this
+            this.$axios.get('review/selectAll')
+                .then(response => {
+                    console.log(response.data)
+                    _this.tableData = response.data
+                })
+                .catch(function (error) {
+                console.log(error)
+            })
         },
         // 触发搜索按钮
         handleSearch() {
-            this.$set(this.query, 'pageIndex', 1);
-            this.getData();
+                var _this = this
+                this.$axios.get('review/selectByuser_id/'+this.query.userId)
+                    .then(response => {
+                        console.log(response.data)
+                        _this.tableData = response.data
+                        _this.query.userId = '';
+                    })
+                    .catch(function (error) {
+                    console.log(error)
+                })
+        },
+        handleSearch2() {
+                var _this = this
+                this.$axios.get('review/selectByapp_id/'+this.query.appId)
+                    .then(response => {
+                        console.log(response.data)
+                        _this.tableData = response.data
+                        _this.query.appId = '';
+                    })
+                    .catch(function (error) {
+                    console.log(error)
+                })
         },
         // 删除操作
         handleDelete(index, row) {
+            var _this = this
             // 二次确认删除
             this.$confirm('确定要删除吗？', '提示', {
                 type: 'warning'
             })
                 .then(() => {
-                    this.$message.success('删除成功');
-                    this.tableData.splice(index, 1);
+                    // 删除
+                this.$axios.delete('review/delete/'+row.reviewId)
+                    .then(response => {
+                        console.log(response.data)
+                        _this.tableData.splice(index, 1)
+                        _this.$message.success('删除成功')
+                        // 刷新当前页面
+                        _this.getData()
+                    })
+                    .catch(function (error) {
+                    console.log(error)
+                })
                 })
                 .catch(() => {});
         },
@@ -170,14 +211,51 @@ export default {
         handleEdit(index, row) {
             this.idx = index;
             this.form = row;
+            this.updateId = row.reviewId
+            this.updateContent = row.content
             this.editVisible = true;
         },
         // 保存编辑
         saveEdit() {
-            this.editVisible = false;
-            this.$message.success(`修改第 ${this.idx + 1} 行成功`);
-            this.$set(this.tableData, this.idx, this.form);
+
+            var _this = this
+            this.$axios.put('review/update',{
+                reviewId: this.updateId,
+                content: this.updateContent
+            })
+                .then(response => {
+                    console.log(response.data)
+                        _this.editVisible = false
+                        _this.getData();
+                    })
+                .catch(function (error) {
+                console.log(error)
+            })
         },
+
+        // 新增评论
+        handleAdd(){
+            this.addVisible = true
+        },
+
+        // 确认添加
+        saveAdd(){
+            var _this = this
+            this.$axios.post('review/insert',{
+                appId: this.addform.appId,
+                userId: this.addform.userId,
+                content: this.addform.content
+            })
+                .then(response => {
+                    console.log(response.data)
+                        _this.addVisible = false
+                        _this.getData();
+                    })
+                .catch(function (error) {
+                console.log(error)
+            })
+        },
+
         // 分页导航
         handlePageChange(val) {
             this.$set(this.query, 'pageIndex', val);
